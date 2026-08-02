@@ -1,17 +1,33 @@
-from math import sqrt
 from Constants import G
-def calculate_acceleration(sun_position, earth_position):
+import numpy as np
 
-    # Calculate Euclidean distance between planets 
-    delta_x = sun_position[0] - earth_position[0]
-    delta_y = sun_position[1] - earth_position[1]
-    distance_earth_sun = sqrt((delta_x)**2 + (delta_y)**2)
 
-    # Calculate acceleration components using a = F/m and gravitational force formula. Normalise units with M = r = 1 and then separating it into components 
-    # using sin(theta) = deltax/x and cos(theta) = deltay/y, yielding a_x = G * M * delta_x / r^3. 
-    # Approximate G with 4*pi^2
-    
-    acceleration_x = (G * delta_x) / distance_earth_sun ** 3
-    acceleration_y = (G * delta_y) / distance_earth_sun ** 3
+def compute_accelerations(positions, masses):
+    """
+    Compute the gravitational acceleration on every body from a single,
+    consistent snapshot of the system.
 
-    return [acceleration_x, acceleration_y]
+    positions : ndarray, shape (n_bodies, 2)   -- one row per body
+    masses    : ndarray, shape (n_bodies,)
+
+    Returns ndarray, shape (n_bodies, 2) -- acceleration of each body.
+
+    Crucially, this only ever reads from `positions`; it never mutates
+    anything. That means every body's acceleration is computed against the
+    *same* instant in time, which is what makes it safe to use inside
+    higher-order integrators (velocity verlet, leapfrog, RK4, ...) as well
+    as simple ones -- there's no risk of body #2 "seeing" body #1's already
+    -updated position.
+    """
+    n = len(positions)
+    accelerations = np.zeros_like(positions, dtype=float)
+
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                continue
+            r_vec = positions[j] - positions[i]
+            r = np.linalg.norm(r_vec)
+            accelerations[i] += G * masses[j] * r_vec / r ** 3
+
+    return accelerations
