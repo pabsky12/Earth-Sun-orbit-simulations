@@ -1,5 +1,5 @@
-from Constants import DT
-from Physics import compute_accelerations
+from constants import DT, relativistic
+from physics import compute_accelerations
 import numpy as np
 
 
@@ -19,8 +19,8 @@ def simulate(simulator, bodies, NUM_ITERATIONS):
     n = len(bodies)
     masses = np.array([body.mass for body in bodies], dtype=float)
 
-    positions = np.zeros((NUM_ITERATIONS + 1, n, 2))
-    velocities = np.zeros((NUM_ITERATIONS + 1, n, 2))
+    positions = np.zeros((NUM_ITERATIONS + 1, n, 3))
+    velocities = np.zeros((NUM_ITERATIONS + 1, n, 3))
 
     positions[0] = np.array([body.position for body in bodies])
     velocities[0] = np.array([body.velocity for body in bodies])
@@ -35,6 +35,7 @@ def simulate(simulator, bodies, NUM_ITERATIONS):
             masses,
             DT,
             compute_accelerations,
+            relativistic,
         )
 
     return {

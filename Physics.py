@@ -1,33 +1,50 @@
-from Constants import G
+from constants import G, epsilon, C
 import numpy as np
 
+def compute_accelerations(positions, masses, velocities, relativistic=False):
 
-def compute_accelerations(positions, masses):
-    """
-    Compute the gravitational acceleration on every body from a single,
-    consistent snapshot of the system.
-
-    positions : ndarray, shape (n_bodies, 2)   -- one row per body
-    masses    : ndarray, shape (n_bodies,)
-
-    Returns ndarray, shape (n_bodies, 2) -- acceleration of each body.
-
-    Crucially, this only ever reads from `positions`; it never mutates
-    anything. That means every body's acceleration is computed against the
-    *same* instant in time, which is what makes it safe to use inside
-    higher-order integrators (velocity verlet, leapfrog, RK4, ...) as well
-    as simple ones -- there's no risk of body #2 "seeing" body #1's already
-    -updated position.
-    """
     n = len(positions)
-    accelerations = np.zeros_like(positions, dtype=float)
 
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            r_vec = positions[j] - positions[i]
-            r = np.linalg.norm(r_vec)
-            accelerations[i] += G * masses[j] * r_vec / r ** 3
+    # r_vec[i, j] = vector from body i to body j, shape (n, n, 2)
+    r_vec = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
 
+    # distance[i, j] = |r_vec[i, j]|, shape (n, n)
+    r = np.linalg.norm(r_vec, axis=2)
+
+    # Add softening paramemeter to prevent division by zero errors
+    r_soft = np.sqrt(r**2 + epsilon**2)
+
+    # avoid division by zero on the diagonal (i == j)
+    np.fill_diagonal(r_soft, np.inf)
+
+    # acceleration contribution on i from j, shape (n, n, 2)
+    # broadcasting: masses[np.newaxis, :] has shape (1, n) -> (n, n, 1) after reshape
+    contributions = G * masses[np.newaxis, :, np.newaxis] * r_vec / r_soft[:, :, np.newaxis] ** 3
+
+    # sum over j (axis=1) to get total acceleration on each body i
+    accelerations = np.sum(contributions, axis=1)
+
+    if relativistic:
+        accelerations += compute_relativistic_acceleration(positions, velocities, masses)
+        
     return accelerations
+
+def compute_relativistic_acceleration(positions, velocities, masses):
+    
+    r_vec = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]   # r_vec[i,j] = pos[j] - pos[i]
+    v_vec = velocities[np.newaxis, :, :] - velocities[:, np.newaxis, :] # v_vec[i,j] = vel[j] - vel[i]
+
+    r = np.linalg.norm(r_vec, axis=2)
+    np.fill_diagonal(r, np.inf)  # avoid self-interaction blow-up
+
+    v_sq = np.sum(v_vec ** 2, axis=2)         # |v_vec[i,j]|^2, shape (n, n)
+    r_dot_v = np.sum(r_vec * v_vec, axis=2)   # r_vec[i,j] . v_vec[i,j], shape (n, n)
+
+    mass = masses[np.newaxis, :]              # masses[j], broadcasts to (n, n)
+
+    prefactor = (G * mass) / (C**2 * r**3)    # shape (n, n)
+    bracket = (((4 * G * mass / r) - v_sq)[:, :, np.newaxis] * r_vec
+               + 4 * r_dot_v[:, :, np.newaxis] * v_vec)   # shape (n, n, 3)
+
+    contributions = prefactor[:, :, np.newaxis] * bracket
+    return np.sum(contributions, axis=1)      # shape (n, 3): total correction per body i

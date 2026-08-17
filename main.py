@@ -1,23 +1,25 @@
 import numpy as np
-from BasicOrbitSimulation import simulate
-from Integratos import simulators
+import matplotlib as plt
+from orbit_simmulation import simulate
+from integrators import simulators
 from analysis import analyse_results
-from Constants import NUM_ITERATIONS, DT
-from Plotting import orbit_analysis_plot, energy_momentum_analysis
+from constants import NUM_ITERATIONS, DT, stride, SIMULATE
+from plotting import orbit_analysis_plot, energy_momentum_analysis
 from time import time_ns
 from bodies import bodies
+from plotting_3D import plot_orbits, add_barycenter_trace
 
 # +1 because `simulate` returns the initial state as well as every step
 time = np.arange(NUM_ITERATIONS + 1) * DT
 body_names = [body.name for body in bodies]
 
-all_energies = {}
-all_momentums = {}
-computation_times = {}
-
-
 def main():
 
+    all_energies = {}
+    all_momentums = {}
+    all_barycenters = {}
+    computation_times = {}
+    
     for simulator in simulators:
         start_time = time_ns()
         # `simulate` reads bodies' initial state but never mutates the
@@ -29,15 +31,22 @@ def main():
 
         positions = results["Positions"]  # shape (steps+1, n_bodies, 2)
 
-        energies, momentums, barycenters = analyse_results(results)
+        energies, angular_momenta, barycenters = analyse_results(results)
 
-        orbit_analysis_plot(positions, body_names, energies, momentums, barycenters, time, NUM_ITERATIONS, simulator, time_taken)
+        fig = plot_orbits(positions, body_names, simulator.__name__, NUM_ITERATIONS, stride, SIMULATE)
+        fig = add_barycenter_trace(fig, barycenters)
+        fig.show()
+
+        orbit_analysis_plot(positions, body_names, energies, angular_momenta, barycenters, time, NUM_ITERATIONS, simulator, time_taken)
 
         all_energies[simulator.__name__] = energies
-        all_momentums[simulator.__name__] = momentums
+        all_momentums[simulator.__name__] = angular_momenta
+        all_barycenters[simulator.__name__] = barycenters
         computation_times[simulator.__name__] = time_taken
 
-    energy_momentum_analysis(all_energies, all_momentums, time, simulators, computation_times)
+    energy_momentum_analysis(all_energies, all_momentums, all_barycenters, time, simulators, computation_times)
 
+    plt.show()
 
-main()
+if __name__ == "__main__":
+    main()
